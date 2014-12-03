@@ -1,0 +1,24 @@
+<h1>Welcome#index</h1>
+<p>Find me in app/views/welcome/index.html.erb</p>
+
+<form id="upload_form" class="upload-form">
+  <input name="file" type="file" />
+  <p>
+    <input type="submit" value="Upload Image" />
+  </p>
+</form>
+
+<%= form_tag({controller: 'images', action: 'create'}, {multipart: true}) do %>
+  <input name="file" type="file" />
+  <div>
+    width
+    <input type="text" name="variants[preview][width]" value="640" size="4"/>
+  </div>
+  <div>
+    height
+    <input type="text" name="variants[preview][height]" value="480" size="4"/>
+  </div>
+  <p>
+    <input type="submit" value="Upload Image" />
+  </p>
+<% end %>
