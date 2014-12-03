@@ -75,4 +75,21 @@ module ManagedImage::ResizeMethods
     )
   end
 
+  def reframe(width, height, x1, y1, x2, y2)
+    is width, Fixnum
+    is height, Fixnum
+    is x1, Float
+    is y1, Float
+    is x2, Float
+    is y2, Float
+    new_variant(
+      width,
+      height,
+      fixnum_percent(x1),
+      fixnum_percent(y1),
+      fixnum_percent(x2),
+      fixnum_percent(y2)
+    )
+  end
+
 end

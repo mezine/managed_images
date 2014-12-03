@@ -1,8 +1,8 @@
 module ManagedImage::VariantClass
 
-  # Returns a hexdigest for security
+  # Returns a hexdigest for security. We add the salt at the beginning.
   def hexdigest_for(s)
-    Digest::MD5.hexdigest(s)
+    Digest::MD5.hexdigest(ManagedImage.salt + s)
   end
 
   # Returns all the information about the variant as a Struct from the path

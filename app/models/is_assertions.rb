@@ -4,8 +4,8 @@ module IsAssertions
     raise StandardError, msg, caller(skip) if !pass
   end
 
-  def is(value, kind)
-    assert(value.is_a?(kind), "#{value} must be a kind of #{kind}", 2)
+  def is(value, kind, msg=nil)
+    assert(value.is_a?(kind), msg || "#{value} must be a kind of #{kind}", 2)
     value
   end
 

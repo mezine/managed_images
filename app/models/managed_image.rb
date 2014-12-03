@@ -6,6 +6,8 @@ class ManagedImage
   
   attr_accessor :path, :width, :height, :variants
 
+  MAX_FILE_SIZE = 25 * 1024 * 1024
+
   def initialize(path, width, height)
     is path, String
     is width, Fixnum
@@ -16,23 +18,16 @@ class ManagedImage
     self.variants = {}
   end
 
-  def fog_directory
-    ManagedImage.originals_storage.directories.get(File.dirname(path))
+  # Returns the originals_storage ManagedImage::Storage object
+  def storage
+    ManagedImage.originals_storage
   end
 
-  def open
-    directory.files.get(File.basename(path)) do |f|
-      ap 'f.length'
-    end
-  end
-
-  def fog_file
-    file = fog_directory.files.get(File.basename(path))    
-  end
-
+  # Returns a Magick::Image object
   def magick_image
-    # returns an array of images of which we only want the first
-    Magick::Image.from_blob(fog_file.body)[0]
+    # Magick::Image.from_blob returns an array of images of which we only want
+    # the first
+    Magick::Image.from_blob(storage.get(self.path).body)[0]
   end
 
   def aspect
@@ -77,19 +72,12 @@ class ManagedImage
     }
   end
 
-end
+  def to_document
+    ManagedImage::ImageDocument.new(
+      path: path,
+      width: width,
+      height: height
+    )
+  end
 
-# TEMPORARY
-#
-# Because whenever Rails reloads a module, we are losing all the configuration
-# information!
-ManagedImage.config do |config|
-  config.set_originals_storage Fog::Storage.new(
-    local_root: File.join(Rails.root.to_path, '.data/managed-images/originals'),
-    provider: 'Local'
-  )
-  config.set_variants_storage Fog::Storage.new(
-    local_root: File.join(Rails.root.to_path, '.data/managed-images/variants'),
-    provider: 'Local'
-  )
 end

@@ -51,3 +51,6 @@ gem 'fog'
 # For image manipulation
 gem 'rmagick'
 gem 'mini_magick'
+
+# Mongoid
+gem 'mongoid', '~> 4.0.0'

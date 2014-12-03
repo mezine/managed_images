@@ -1,21 +1,14 @@
 ManagedImage.config do |config|
-  config.set_originals_storage Fog::Storage.new(
-    local_root: File.join(Rails.root.to_path, '.data/managed-images/originals'),
-    provider: 'Local'
+  config.set_salt "salt"
+  config.set_originals_storage(
+    local_root: File.join(Rails.root.to_path, '.data/managed-images'),
+    provider: 'Local',
+    dir: 'originals'
   )
-  config.set_variants_storage Fog::Storage.new(
-    local_root: File.join(Rails.root.to_path, '.data/managed-images/variants'),
-    provider: 'Local'
+  config.set_variants_storage(
+    local_root: File.join(Rails.root.to_path, '.data/managed-images'),
+    provider: 'Local',
+    dir: 'variants',
+    url: 'http://localhost:3000/managed-images'
   )
 end
-
-Rails.application.config.managed_images.originals_storage = {
-    local_root: File.join(Rails.root.to_path, '.data/managed-images'),
-    provider: 'Local',
-    dir: 'originals'
-}
-Rails.application.config.managed_images.variants_storage = {
-    local_root: File.join(Rails.root.to_path, '.data/managed-images'),
-    provider: 'Local',
-    dir: 'originals'
-}

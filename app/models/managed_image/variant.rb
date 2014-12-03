@@ -5,7 +5,7 @@ class ManagedImage::Variant
 
   attr_accessor :parent_image, :width, :height, :x1, :x2, :y1, :y2, :subimages, :authenticated
 
-  def initialize(parent_image, width, height, x1, x2, y1, y2)
+  def initialize(parent_image, width, height, x1, x2, y1, y2, authenticated=false)
     is parent_image, ManagedImage # parent
     is width, Fixnum
     is height, Fixnum
@@ -13,6 +13,7 @@ class ManagedImage::Variant
     is x2, Fixnum
     is y1, Fixnum
     is y2, Fixnum
+    assert authenticated == !!authenticated # boolean check
     self.parent_image = parent_image
     self.width = width
     self.height = height
@@ -20,12 +21,12 @@ class ManagedImage::Variant
     self.x2 = x2
     self.y1 = y1
     self.y2 = y2
+    self.authenticated = authenticated
   end
 
-  def fog_directory
-    # p ManagedImage.variants_storage
-    # p parent_image.path
-    directory = ManagedImage.variants_storage.directories.create(key: File.dirname(parent_image.path))
+  # Returns the ManagedImage::Storage object for variants
+  def storage
+    ManagedImage.variants_storage
   end
 
   def authenticated?
@@ -62,17 +63,14 @@ class ManagedImage::Variant
 
   # Generates the image for the variant only if it doesn't already exist
   def generate
-    fog_files = fog_directory.files
-    basename = File.basename(subpath)
-    if !fog_files.head(basename)
+    if !storage.exists?(subpath)
+      if !self.authenticated
+        raise ManagedImage::AuthenticationError, "The ManagedImage::Variant has not been properly authenticated"
+      end
       magick_image = parent_image.magick_image
       magick_image.crop!(*crop_rect)
       magick_image.resize!(self.width, self.height)
-      fog_file = fog_files.create(
-        key: basename,
-        body: magick_image.to_blob,
-        public: true
-      )
+      storage.create(subpath, magick_image.to_blob)
     end
     self
   end
@@ -80,13 +78,17 @@ class ManagedImage::Variant
   # Return a BLOB that represents the file
   def blob
     generate
-    fog_file = fog_directory.files.get(File.basename(subpath))
-    fog_file.body
+    storage.get(subpath).body
+  end
+
+  def url
+    storage.url_for(path)
   end
 
   # Returns variant information as JSON
   def as_json(*args)
     {
+      'url' => url,
       'path' => path,
       'width' => width,
       'height' => height,

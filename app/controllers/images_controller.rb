@@ -1,16 +1,17 @@
 class ImagesController < ApplicationController
 
   def create
-    image = ManagedImage.from_params('s/thesunny', params)
+    # image = ManagedImage.from_params('s/thesunny', params)
+    image = ManagedImage.upload('s/thesunny', params[:file], params[:variants])
     variant = image.variants['preview']
     @image = image
-    render json: image
+    render json: image.to_document
   end
 
   # The image itself (the file) is returned from here.
   def show
     variant = ManagedImage::Variant.from_path("#{params[:path]}.#{params[:format]}", params[:q])
-    send_data variant.blob, :type => 'image/jpeg',:disposition => 'inline'
+    send_data variant.blob, :type => 'image/jpeg', :disposition => 'inline'
   end
 
   # RESIZE METHODS
@@ -76,7 +77,7 @@ class ImagesController < ApplicationController
     x2 = params[:x2].to_i
     y1 = params[:y1].to_i
     y2 = params[:y2].to_i
-    render json: image.crop_resize(image, width, height, x1, y1, x2, y2)
+    render json: image.reframe(width, height, x1, y1, x2, y2)
   end
 
 end

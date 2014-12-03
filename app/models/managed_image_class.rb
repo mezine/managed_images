@@ -1,17 +1,13 @@
 module ManagedImageClass
 
+  extend Forwardable
   include IsAssertions
 
   MAX_WIDTH = 1600
   MAX_HEIGHT = 1600
 
-  def originals_storage
-    ManagedImageConfig.originals_storage
-  end
- 
-  def variants_storage
-    ManagedImageConfig.variants_storage
-  end
+  def_delegators :'Rails.application.config.managed_image',
+    :originals_storage, :variants_storage, :salt
 
   # Returns uploaded file src info
   def new_src_info(uploaded_file)
@@ -67,31 +63,40 @@ module ManagedImageClass
     )
   end
 
+  # Creates a ManagedImage object from an uploaded file. Optionally takes
+  # a Hash that describes variants. This method is usuaally called from a
+  # controller
+  def upload(dir, uploaded_file, variants={})
+    is dir, String
+    is uploaded_file, ActionDispatch::Http::UploadedFile
+    is variants, Hash
 
-  # Takes an uploaded file in params[:file] and returns a ManagedImage object
-  def from_params(dir, params)
-    src = new_src_info(params[:file])
+    ap 'upload---------------'
+    ap ManagedImage::MAX_FILE_SIZE
+    ap uploaded_file.size
+    if uploaded_file.size > ManagedImage::MAX_FILE_SIZE
+      raise "The uploaded file must be less than #{ManagedImage::MAX_FILE_SIZE} bytes"
+    end
+
+    src = new_src_info(uploaded_file)
     dest = new_dest_info(dir, src)
 
-    # create directory and file
-    directory = originals_storage.directories.create(key: dest.dir)
-    if directory.files.head(dest.filename).nil?
+    # Save the file to storage
+    if !originals_storage.exists?(dest.path)
       File.open(src.path) do |f|
-        directory.files.create(
-          key: dest.filename,
-          body: f,
-          public: true
-        )
+        originals_storage.create(dest.path, f)
       end
     end
 
+    # Get the ManagedImage object
     image = self.new dest.path, src.width, src.height
-    if params[:variants]
-      params[:variants].each do |key, variant_hash|
-        v = new_variant_info(variant_hash)
-        image.add_variant(key, v.width, v.height, v.x1, v.y1, v.x2, v.y2)
-      end
+
+    # Add variants to image
+    variants.each do |key, variant_hash|
+      v = new_variant_info(variant_hash)
+      image.add_variant(key, v.width, v.height, v.x1, v.y1, v.x2, v.y2)
     end
+
     image
   end
 
@@ -108,7 +113,6 @@ module ManagedImageClass
 
   def from_path(path)
     image_info = image_info_from_path(path)
-    p '-------------------'
     self.new(image_info.path, image_info.width, image_info.height)
   end
 
