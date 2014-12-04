@@ -45,6 +45,11 @@ class ManagedImage::Variant
     "#{subpath}?q=#{hexdigest}"
   end
 
+  # Returns the mime type based on the file extension
+  def mimetype
+    MIME::Types.type_for(parent_image.path).first.content_type
+  end
+
   # Takes the x1, x2, y1 and y2 coordinates (which are represented as
   # percentages) and converts it into pixel coordinates of x, y, width, height
   def crop_rect

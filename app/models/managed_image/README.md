@@ -21,21 +21,29 @@ Here are features that ManagedImage provides:
 * A Variant can be stored as a String that represents its path and a query string "s/thesunny/fee8f84e2cdd414ac3e6d826ff2e313b-1500-1000-640-480-0-100-0-100.jpg?q=ef0116e8a537cc328b563058360fed2b". The entire ManagedImage::Variant can be recreated from the String.
 * Security checks using MD5 Hashes to prevent DOS attacks on image generation
 * Limits image upload size to 25 MB
+* Needs to run in JavaScript on client and server
+
 
 ## Architecture
 
 * ManagedImage images are stored in Fog::Storage
 * ManagedImage::Variant images are stored in a separate Fog::Storage
-* Fog::Storage can be a local file system of in the cloud like S3
-* When we upload an image, we get back a ManagedImage object
+* Fog::Storage can be a local file system or in the cloud like S3. Test local, deply in the cloud.
+* When we upload an image, we get a ManagedImage object
 * When we upload, we can also pass in additional parameters so that we can get back one or more ManagedImage::Variant objects.
-* For ManagedImage objects that already exist, we can call the #new_variant method from the ManagedImage object and we get back a Variant. The most important value of a Variant is a URL where the Variant can be accessed from. Although we already have a URL, at this point, the variant image may or may not exist.
+* For ManagedImage objects that already exist, we can call the resize methods (like #resize, #resize_to_fit, #resize_to_fill, etc) from the ManagedImage object and we get back a Variant. The most important value of a Variant is a URL where the Variant can be accessed from.
+* Just because we have a URL, the file for the image may not exist yet. Images are generated as required.
 * The URL goes to either
     - The direct URL to the Fog::Storage where the image can be retrieved (e.g. on S3)
     - ImagesController#show
 * If the image goes to Fog::Storage, then if the image is missing, we defer to the ImagesController
 * When we hit the ImagesController, we look to see if the Variant already exists. If it does, we simply return it.
 * If the image does not exist, we check to see if the security hash matches. If not, we return some kind of error, possibly a 404 error. If it matches, we generate the image and store it in the variants storage.
+
+
+## Future
+
+* To increase performance, when a Variant is generated on the server, we spawn a thread that starts creating the file. The method returns immediately. This means that we are processing the Variant in parallel with the back and forth http requests.
 
 
 ## Usage
@@ -166,7 +174,7 @@ variant = image.reframe(width, height, x1, y1, x2, y2)
 
 ### Storing ManagedImage objects in Database
 
-After uploading an image, you can store them in a Mongoid::Document by calling `ManagedImage#to_document`. You will get back a `ManagedImage::ImageDocument` object..
+After uploading an image, you can store the image in a Mongoid::Document by calling `ManagedImage#to_document`. You will get back a `ManagedImage::ImageDocument` object..
 
 ```ruby
 image = ManagedImage.upload(subdir, uploaded_file, variants_hash)
@@ -181,10 +189,112 @@ managed_image = image_document.to_image
 ```
 
 
+### Best Practices: Upload directory
+
+When images are uploaded using the `ManagedImage#upload` method, the directory argument should be laid out as "#{type}/#{id}"
+
+For example, for images that are uploaded to a site:
+
+```ruby
+ManagedImage.upload('site/12345', params[:file], params[:variants])
+```
+
+
+
+
+### Best Practices: Not Storing Variants
+
+It is not necessary to store Variant images in the database. This is because  you can generate Variants when needed.
+
+Once a variant is generated with a certain specification, that image will not be generated again.
+
+For example, all these methods will create the exact same Variant URL assuming the original image is of size 1024x768 (aspect ratio 4:3).
+
+```ruby
+variant_1 = managed_image.resize(640, 480)
+variant_2 = managed_image.resize_to_fit(640, 480)
+variant_3 = managed_image.resize_to_fill(640, 480)
+variant_4 = managed_image.reframe(640, 480, 0.0, 0.0, 1.0, 1.0)
+# All variants refer to the same file on the server
+# variant_1.url == variant_2.url == variant_3.url == variant_4.url
+```
+
+If you were to upload an image to use as a profile picture, here's how you could generate the variant at the time you want to display the image.
+
+```html
+<img src="<%= @profile_image.resize_to_fit(50, 50).url %>" width="50" height="50">
+```
+
+or
+
+```html
+<% variant = @profile.image.resize_to_fit(50, 50) %>
+<img src="<%= variant.url %>" width="<%= variant.width %>" height="<%= variant.height %>">
+```
+
+Note: We'd probably use a helper in the last example.
+
+
+
+### Storing ManagingImage objects and Variant objects in JSON (e.g. Layout Builder)
+
+Storing images in JSON objects is more difficult because the DOM is generated in the client (browser) and not the server. This means that you don't have access to the server methods for generating variants.
+
+The reason you can not programmatically generate the variants on the Client is because you need access to the salt to generate the secure hash. We can not provide the salt to the Client as it will break security.
+
+**The following is a description of how to build this functionality in the Client but, we don't actually have any code to do this. This might be something I (Sunny) can do though.**
+
+#### ClientImage
+
+The ClientImage is a JavaScript version of ManagedImage.
+
+```javascript
+var clientImage = new ClientImage(path, width, height)
+```
+
+We generate variants by calling the resize and reframe methods off of it. It returns a promise that contains the variant.
+
+```javascript
+var resizePromise = clientImage.resize(50, 50)
+// or use the promise directly
+resizePromise.then(function (variant) {
+  $('#profile-pic').attr({
+    src: variant.url,
+    width: variant.width,
+    height: variant.height
+  })
+})
+```
+
+In ReactJS, you'd probably use the callback to call `setState` on the React Element.
+
+
+##### ClientImage Configuration
+
+For this to work, we'd need to do some configuration so that ClientImage would know which URLs to use to get back the variants.
+
+```javascript
+ClientImage.configForBrowser({
+  url: 'http://localhost:3000/managed-images'
+});
+
+// resize URL: 'http://localhost:3000/managed-images/resize'
+// resizeToFit URL: 'http://localhost:3000/managed-images/resize-to-fit'
+```
+
+There should also be a way to configure the ClientImage for running on the server. The salt would have to be provided:
+
+```javascript
+ClientImage.configForServer({
+  salt: 'salt'
+});
+```
 
 
 TODO:
 
-* Need to allow setting variants information in different ways which are declarative (e.g. resize to fit)
-* ImagesController#show should set the right :type => 'images/jpeg'. Currently its static, needs to depend on image type.
-* Perhaps some way to upload temporary images?
+[] Need to allow setting variants information in different ways which are declarative (e.g. resize to fit)
+[x] ImagesController#show should set the right :type => 'images/jpeg'. Currently its static, needs to depend on image type.
+[] Perhaps some way to upload temporary images?
+[x] Make sure uploaded file is an Image
+[] Provide the argument for the subdirectory as an Array with proper argument checking to prevent '../' or './'

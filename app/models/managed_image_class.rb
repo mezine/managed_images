@@ -14,6 +14,9 @@ module ManagedImageClass
     path = uploaded_file.path
     hexdigest = Digest::MD5.file(path).hexdigest
     size = FastImage.size(path)
+    if size.nil?
+      raise "The uploaded file is not a valid Image"
+    end
     OpenStruct.new(
       path: path,
       basename: File.basename(uploaded_file.original_filename, '.*'),
@@ -67,6 +70,9 @@ module ManagedImageClass
   # a Hash that describes variants. This method is usuaally called from a
   # controller
   def upload(dir, uploaded_file, variants={})
+    if !uploaded_file
+      raise "There was no uploaded file for the image found"
+    end
     is dir, String
     is uploaded_file, ActionDispatch::Http::UploadedFile
     is variants, Hash

@@ -5,13 +5,13 @@ class ImagesController < ApplicationController
     image = ManagedImage.upload('s/thesunny', params[:file], params[:variants])
     variant = image.variants['preview']
     @image = image
-    render json: image.to_document
+    render json: image#.to_document
   end
 
   # The image itself (the file) is returned from here.
   def show
     variant = ManagedImage::Variant.from_path("#{params[:path]}.#{params[:format]}", params[:q])
-    send_data variant.blob, :type => 'image/jpeg', :disposition => 'inline'
+    send_data variant.blob, :type => variant.mimetype, :disposition => 'inline'
   end
 
   # RESIZE METHODS
