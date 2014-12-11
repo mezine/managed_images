@@ -5,6 +5,21 @@ module ManagedImage::VariantClass
     Digest::MD5.hexdigest(ManagedImage.salt + s)
   end
 
+  # Returns a Variant object based on the path and the given hexdigest.
+  def from_path(path, hexdigest)
+    info = info_from_path(path, hexdigest)
+    image = ManagedImage.new(
+      info.original_path, 
+      info.original_width, 
+      info.original_height
+    )
+    variant = image.new_variant(info.width, info.height, info.x1, info.y1, info.x2, info.y2)
+    variant.authenticated = variant.hexdigest == hexdigest
+    variant
+  end
+
+private
+
   # Returns all the information about the variant as a Struct from the path
   def info_from_path(path, hexdigest)
     basename = File.basename(path, '.*')
@@ -27,19 +42,6 @@ module ManagedImage::VariantClass
       original_filename: original_filename,
       original_path: (segments[0..-2] + [original_filename]).join('/')
     )
-  end
-
-  # Returns a Variant object based on the path and the given hexdigest.
-  def from_path(path, hexdigest)
-    info = info_from_path(path, hexdigest)
-    image = ManagedImage.new(
-      info.original_path, 
-      info.original_width, 
-      info.original_height
-    )
-    variant = image.new_variant(info.width, info.height, info.x1, info.y1, info.x2, info.y2)
-    variant.authenticated = variant.hexdigest == hexdigest
-    variant
   end
 
 end

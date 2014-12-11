@@ -2,26 +2,25 @@
 
 ## Overview
 
-We use MangedImage to store images on our file system or in the cloud.
+Use ManagedImage to store images in the cloud or on our file system that can be easily resized and delivered online.
 
 ManagedImage fills specific needs for our application is not simply reinventing the wheel although it will, necessarily, cover some features that can be found in other image libraries like Paperclip.
 
 Here are features that ManagedImage provides:
 
 * Images are  stored in  the local file system or in one of 39 cloud storage provider including Amazon S3
-* Uploaded images are stored in a private directory which is not accessed by users (the originals directory)
-* We show images to users by providing a URL to a variant. A variant is a variation of the original images which includes a rectangle viewport of a portion of the image and the width/height of the final image to deliver
-* Variant images are stored in a public directory can can be accessed by users (the variants directory)
-* Variants are generated upon request
-* The entire Variants directory acts like a cache. Any images can be deleted and they will be regenerated next time they are accessed.
-* We can modify the base URL which we wish to deliver to the user which allows us to easily use a CDN [TODO]
+* Uploaded images are stored in a private directory which should not be accessed by users (the originals directory)
+* Images are displayed to users by providing a URL to a variant. A variant is a variation of the original images which includes a rectangle viewport of a portion of the image and the width/height of the final image to deliver
+* Variant images are stored in a public directory that can be accessed by users (the variants directory)
+* Variants are generated lazily upon request
+* The entire Variants directory acts like a cache. Images can event be deleted and they will be regenerated next time they are accessed.
+* We can modify the base URL which we wish to deliver to the user which allows us to easily use a CDN 
 * Although generated upon request, the variant URL includes a hash for verification. If the wrong hash is provided, the image is not provided. This prevents denial of service attacks by someone just providing new width/height coordinates.
-* Variant URLs are easily generated [TODO]
-* A MangedImage can be stored as a String like "s/thesunny/fee8f84e2cdd414ac3e6d826ff2e313b-1500-1000.jpg". The entire ManagedImage can be recreated from the String.
+* A MangedImage can be stored as a String like "s/thesunny/fee8f84e2cdd414ac3e6d826ff2e313b-1500-1000.jpg". The ManagedImage can be created from the String.
 * A Variant can be stored as a String that represents its path and a query string "s/thesunny/fee8f84e2cdd414ac3e6d826ff2e313b-1500-1000-640-480-0-100-0-100.jpg?q=ef0116e8a537cc328b563058360fed2b". The entire ManagedImage::Variant can be recreated from the String.
 * Security checks using MD5 Hashes to prevent DOS attacks on image generation
 * Limits image upload size to 25 MB
-* Needs to run in JavaScript on client and server
+* Can be run Isomorphically in JavaScript on client and server (TODO)
 
 
 ## Architecture
@@ -43,7 +42,7 @@ Here are features that ManagedImage provides:
 
 ## Future
 
-* To increase performance, when a Variant is generated on the server, we spawn a thread that starts creating the file. The method returns immediately. This means that we are processing the Variant in parallel with the back and forth http requests.
+* To increase performance, when a Variant object is generated on the server, we spawn a thread that starts creating the Variant's image file. The method returns immediately. This means that we are processing the Variant in parallel with the back and forth http requests.
 
 
 ## Usage
@@ -81,9 +80,13 @@ end
 
 Call this with the salt to use for generating the security hash. The value for `salt` must be a String.
 
+Do not recommend putting the salt value directly in the initializer. I believe there is a more secure place to put Rails security values.
+
+http://www.gotealeaf.com/blog/managing-environment-configuration-variables-in-rails
+
 #### config.set_originals_storage(options), config.set_variants_storage(options)
 
-This sets the location where originally uploaded images should be stored and the location where variants of that image should be stored.
+This sets the storage/location where originally uploaded images should be stored and the storage/location where variants of that image should be stored.
 
 Typically, originals images are not public. Only variant images are public (i.e. can be viewed from a URL)
 
@@ -91,11 +94,11 @@ Typically, originals images are not public. Only variant images are public (i.e.
 
 http://fog.io/storage/
 
-The values that can be passed through depend on the specific storage `provider` you select.
+The values that can be passed through depend on the specific storage `provider` you select. A typical storage provider would be Amazon S3.
 
 There are also two special values that you can pass through.
 
-* `dir` sets a subdirectory with a provider that you can select. In our example, we set a subdirectory within our `local_root`. In this example, it's unnecessary because we could have just set `local_root` to the specific subdirectory; however, in something like Amazon S3, the storage provider may not provider a directory option.
+* `dir` sets a subdirectory within a Fog::Storage object. In our example, we set a subdirectory within our `local_root`. In the example, it's unnecessary to use `dir` option because we could have just set `local_root` to the specific subdirectory; however, in something like Amazon S3, the storage provider may not provider a directory option.
 
 * `url` is a way to set the base URL for the file. If not provided, we use the `public_url` from the storage provider; however, this is not always desirable. For example, we may not want to give the Amazon S3 storage URL. We may wish to give the URL to a Rails Controller or to a CDN. Note: Usually the `url` option need only be provided for variants.
 
@@ -129,17 +132,31 @@ The variants hash looks something like this:
 You can also create your own controller and call the `ManagedImage.upload` method. This method will return a `ManagedImage` instance and return, as a JSON object, a preview variant.
 
 ```ruby
-image = ManagedImage.upload(subdir, uploaded_file, variants_hash)
-preview_variant = image.variants[:preview]
-render json: preview_variant
+# in controller
+def create
+  image = ManagedImage.upload(subdir, params[:file], params[:variants])
+  preview_variant = image.variants[:preview]
+  render json: preview_variant
+end
+```
+
+The subdir value can be a String or an Array of path segments. The version with the path segments can be useful to compose directory segments:
+
+```ruby
+image = ManagedImage.upload(['site', site_id], uploaded_file, variants_hash)
+# same as
+image = ManagedImage.upload("#{site}/#{site_id}", uploaded_file, variants_hash)
 ```
 
 One could also return the actual image if desired:
 
 ```ruby
-image = ManagedImage.upload(subdir, uploaded_file, variants_hash)
-preview_variant = image.variants[:preview]
-send_data preview_variant.blob, :type => 'image/jpeg', :disposition => 'inline'
+# in controller
+def create
+  image = ManagedImage.upload(subdir, params[:file], params[:variants])
+  preview_variant = image.variants[:preview]
+  send_data preview_variant.blob, :type => 'image/jpeg', :disposition => 'inline'
+end
 ```
 
 
@@ -199,14 +216,20 @@ For example, for images that are uploaded to a site:
 ManagedImage.upload('site/12345', params[:file], params[:variants])
 ```
 
+An alternative, and probably preferrable way to call this method is to pass an Array of Strings as the first argument.
 
+```ruby
+ManagedImage.upload(['site', site.id], params[:file], params[:variants])
+```
+
+In either case, the directory name is checked to ensure that there are no invalid characters to prevent certain security attacks like using `.` or `..` in the directory path. The only valid characters are 0-9, a-z and the dash (-). Only lowercase letters are accepted.
 
 
 ### Best Practices: Not Storing Variants
 
-It is not necessary to store Variant images in the database. This is because  you can generate Variants when needed.
+It's a best practice to not store the variant image in the database. This is because you can generate Variants when needed.
 
-Once a variant is generated with a certain specification, that image will not be generated again.
+Once a variant URL is generated with a certain specification, the image file will not be generated again.
 
 For example, all these methods will create the exact same Variant URL assuming the original image is of size 1024x768 (aspect ratio 4:3).
 
@@ -246,7 +269,7 @@ The reason you can not programmatically generate the variants on the Client is b
 
 #### ClientImage
 
-The ClientImage is a JavaScript version of ManagedImage.
+The ClientImage is a JavaScript version of ManagedImage. The same library can be used both in the browser (client) or when generating HTML on the server using Isomorphic JavaScript. These libraries are JavaScript libraries so they won't work directly from Ruby code.
 
 ```javascript
 var clientImage = new ClientImage(path, width, height)
@@ -255,9 +278,7 @@ var clientImage = new ClientImage(path, width, height)
 We generate variants by calling the resize and reframe methods off of it. It returns a promise that contains the variant.
 
 ```javascript
-var resizePromise = clientImage.resize(50, 50)
-// or use the promise directly
-resizePromise.then(function (variant) {
+ClientImage.resize(50, 50).then(function (variant) {
   $('#profile-pic').attr({
     src: variant.url,
     width: variant.width,
@@ -266,10 +287,35 @@ resizePromise.then(function (variant) {
 })
 ```
 
-In ReactJS, you'd probably use the callback to call `setState` on the React Element.
+In ReactJS, you'd probably do something like this:
+
+```javascript
+React.create({
+  // ...
+  onChangeLayout: function () {
+    // ...
+    ClientImage.resize(newSize.width, newSize.height).then(function (variant) {
+      this.setState({
+        profileVariant: variant
+      })
+    })
+  },
+  //...
+  render: function () {
+    // ...
+  }
+});
+```
 
 
-##### ClientImage Configuration
+#### How ClientImage#resize Works
+
+In the Background the call to the `resize` method on the Client (Browser) would do an AJAX request to the server to get back the Variant URL.
+
+In the call on the server, we would have some JavaScript code that can generate the image URL with the salt. Since this code runs on the server, we can put the salt into the JavaScript code.
+
+
+##### Configuring ClientImage
 
 For this to work, we'd need to do some configuration so that ClientImage would know which URLs to use to get back the variants.
 

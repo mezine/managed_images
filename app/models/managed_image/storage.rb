@@ -22,6 +22,7 @@ class ManagedImage::Storage
     is @dir, String
     is @url, String
     opts.delete(:dir)
+    opts.delete(:url)
     @fog_storage = Fog::Storage.new(opts.to_hash)
   end
 
@@ -64,6 +65,17 @@ class ManagedImage::Storage
     is path, String
     directory = fog_directory(File.dirname(path))
     directory ? !directory.files.head(File.basename(path)).nil? : false
+  end
+
+  # Destroy (delete) a Fog file at the given path
+  def destroy(path)
+    is path, String
+    if exists?(path)
+      get(path).destroy
+      return true
+    else
+      return false
+    end
   end
 
 private

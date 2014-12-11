@@ -13,6 +13,7 @@ Vagrant.configure("2") do |config|
 
   config.vm.provider 'virtualbox' do |v|
     v.gui = true
+    v.memory = 1024
   end
 
   config.vm.network :forwarded_port, guest: 3000, host: 3000

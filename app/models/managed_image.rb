@@ -1,6 +1,6 @@
 class ManagedImage
 
-  extend ManagedImageClass
+  extend ManagedImage::ManagedImageClassMethods
   include IsAssertions
   include ManagedImage::ResizeMethods
   
@@ -34,23 +34,30 @@ class ManagedImage
     self.width.to_f / self.height.to_f
   end
 
-  def add_variant(name, width, height, x1, y1, x2, y2)
+  def add_variant(name, width, height, x1, x2, y1, y2)
     is name, String
-    self.variants[name] = new_variant(width, height, x1, x2, y1, y2)
-    self
-  end
-
-  # Returns a Variant object
-  def new_variant(width, height, x1, y1, x2, y2)
     is width, Fixnum
     is height, Fixnum
     is x1, Fixnum
     is x2, Fixnum
     is y1, Fixnum
     is y2, Fixnum
-    subimage = ManagedImage::Variant.new self, width, height, x1, y1, x2, y2
-    subimage.to_json
-    subimage
+    self.variants[name] = new_variant(width, height, x1, x2, y1, y2)
+    self
+  end
+
+  # Returns a Variant object
+  def new_variant(width, height, x1, x2, y1, y2)
+    is width, Fixnum
+    is height, Fixnum
+    is x1, Fixnum
+    is x2, Fixnum
+    is y1, Fixnum
+    is y2, Fixnum
+    # Create an authenticated variant
+    variant = ManagedImage::Variant.new(self, width, height, x1, x2, y1, y2, true)
+    # variant.to_json
+    variant
   end
 
   # Returns the entire subpath except the extension
@@ -81,3 +88,5 @@ class ManagedImage
   end
 
 end
+
+

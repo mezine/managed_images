@@ -41,6 +41,7 @@ gem 'awesome_print'
 
 # Add Fastimage to quickly find image type and width/height
 gem 'fastimage'
+gem 'image_size'
 
 # Just used for the assertions
 gem 'minitest'
@@ -54,3 +55,6 @@ gem 'mini_magick'
 
 # Mongoid
 gem 'mongoid', '~> 4.0.0'
+gem 'moped'
+
+gem "spring", group: :development
