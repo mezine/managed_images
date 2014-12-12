@@ -44,7 +44,6 @@ class ManagedImageTest < ActiveSupport::TestCase
     assert_equal @expected_path, image.path
     assert_equal 2560, image.width
     assert_equal 1696, image.height
-    assert_equal({}, image.variants)
 
     # check file exists then delete it
     assert_equal true, @storage.exists?(@expected_path)

@@ -93,6 +93,7 @@ class ManagedImage::Variant
   # Returns variant information as JSON
   def as_json(*args)
     {
+      'image' => parent_image,
       'url' => url,
       'path' => path,
       'pathWithQuery' => path_with_query,

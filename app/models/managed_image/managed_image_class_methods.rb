@@ -15,7 +15,7 @@ module ManagedImage::ManagedImageClassMethods
   # Creates a ManagedImage object from an uploaded file. Optionally takes
   # a Hash that describes variants. This method is usuaally called from a
   # controller
-  def upload(dir_argument, uploaded_file, variants={})
+  def upload(dir_argument, uploaded_file)
     dir = normalize_dir(dir_argument)
     is dir, String
     if !uploaded_file
@@ -24,10 +24,10 @@ module ManagedImage::ManagedImageClassMethods
 
     assert uploaded_file.is_a?(ActionDispatch::Http::UploadedFile) || uploaded_file.is_a?(Rack::Test::UploadedFile)
     
-    if variants.nil?
-      variants = {}
-    end
-    is variants, Hash
+    # if variants.nil?
+    #   variants = {}
+    # end
+    # is variants, Hash
 
     # Check max file size
     if uploaded_file.size > ManagedImage::MAX_FILE_SIZE
@@ -70,11 +70,11 @@ module ManagedImage::ManagedImageClassMethods
       image = self.new dest.path, src.width, src.height
     end
 
-    # Add variants to image
-    variants.each do |key, variant_hash|
-      v = new_variant_info(variant_hash)
-      image.add_variant(key, v.width, v.height, v.x1, v.y1, v.x2, v.y2)
-    end
+    # # Add variants to image
+    # variants.each do |key, variant_hash|
+    #   v = new_variant_info(variant_hash)
+    #   image.add_variant(key, v.width, v.height, v.x1, v.y1, v.x2, v.y2)
+    # end
 
     image
   end
@@ -98,7 +98,7 @@ private
     end
     is dir, Array
     dir.each do |segment|
-      assert /^[0-9a-z-_]+$/.match(segment), "each segment of the dir #{File.join(dir).inspect} must be alphanumeric or a '-'"
+      assert /^[0-9a-z\-_]+$/.match(segment), "each segment of the dir #{File.join(dir).inspect} must be alphanumeric or a '-'"
     end
     dir = File.join(dir)
     dir

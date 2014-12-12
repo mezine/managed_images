@@ -1,15 +1,15 @@
 require 'test_helper'
 
 class ManagedImageController < ApplicationController
+  
   def create
-    image = ManagedImage.upload(['test', 'managed_image_controller_test'], params[:file], params[:variants])
+    image = ManagedImage.upload(['test', 'managed_image_controller_test'], params[:file])
     @image = image
     render json: image
   end
 
   def create_with_resize
-    image = ManagedImage.upload(['test', 'managed_image_controller_test'], params[:file], params[:variants])
-    @image = image.add_variant('preview', 320, 240, 0, image.width, 0, image.height)
+    image = ManagedImage.upload(['test', 'managed_image_controller_test'], params[:file])
     variant = image.resize_to_fit(100, 100)
     variant.generate
     render json: variant
@@ -23,9 +23,6 @@ class ManagedImageController < ApplicationController
     x2 = params['x2'].to_i
     y1 = params['y1'].to_i
     y2 = params['y2'].to_i
-    ap '0------------'
-    ap params
-    ap [width, height, x1, x2, y1, y2]
     variant = image.new_variant(width, height, x1, x2, y1, y2)
     render json: variant
   end
@@ -55,7 +52,6 @@ class ManagedImageControllerTest < ActionController::TestCase
     assert_equal "test/managed_image_controller_test/2187f8f15234753a19ab2304fc8ff245-640-480.jpg", json['path']
     assert_equal 640, json['width']
     assert_equal 480, json['height']
-    assert_equal({}, json['variants'])
   end
 
   test 'should create image with variant' do

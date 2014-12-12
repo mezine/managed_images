@@ -1,53 +1,7 @@
+
 # ManagedImage
 
-## Overview
-
-Use ManagedImage to store images in the cloud or on our file system that can be easily resized and delivered online.
-
-ManagedImage fills specific needs for our application is not simply reinventing the wheel although it will, necessarily, cover some features that can be found in other image libraries like Paperclip.
-
-Here are features that ManagedImage provides:
-
-* Images are  stored in  the local file system or in one of 39 cloud storage provider including Amazon S3
-* Uploaded images are stored in a private directory which should not be accessed by users (the originals directory)
-* Images are displayed to users by providing a URL to a variant. A variant is a variation of the original images which includes a rectangle viewport of a portion of the image and the width/height of the final image to deliver
-* Variant images are stored in a public directory that can be accessed by users (the variants directory)
-* Variants are generated lazily upon request
-* The entire Variants directory acts like a cache. Images can event be deleted and they will be regenerated next time they are accessed.
-* We can modify the base URL which we wish to deliver to the user which allows us to easily use a CDN 
-* Although generated upon request, the variant URL includes a hash for verification. If the wrong hash is provided, the image is not provided. This prevents denial of service attacks by someone just providing new width/height coordinates.
-* A MangedImage can be stored as a String like "s/thesunny/fee8f84e2cdd414ac3e6d826ff2e313b-1500-1000.jpg". The ManagedImage can be created from the String.
-* A Variant can be stored as a String that represents its path and a query string "s/thesunny/fee8f84e2cdd414ac3e6d826ff2e313b-1500-1000-640-480-0-100-0-100.jpg?q=ef0116e8a537cc328b563058360fed2b". The entire ManagedImage::Variant can be recreated from the String.
-* Security checks using MD5 Hashes to prevent DOS attacks on image generation
-* Limits image upload size to 25 MB
-* Can be run Isomorphically in JavaScript on client and server (TODO)
-
-
-## Architecture
-
-* ManagedImage images are stored in Fog::Storage
-* ManagedImage::Variant images are stored in a separate Fog::Storage
-* Fog::Storage can be a local file system or in the cloud like S3. Test local, deply in the cloud.
-* When we upload an image, we get a ManagedImage object
-* When we upload, we can also pass in additional parameters so that we can get back one or more ManagedImage::Variant objects.
-* For ManagedImage objects that already exist, we can call the resize methods (like #resize, #resize_to_fit, #resize_to_fill, etc) from the ManagedImage object and we get back a Variant. The most important value of a Variant is a URL where the Variant can be accessed from.
-* Just because we have a URL, the file for the image may not exist yet. Images are generated as required.
-* The URL goes to either
-    - The direct URL to the Fog::Storage where the image can be retrieved (e.g. on S3)
-    - ImagesController#show
-* If the image goes to Fog::Storage, then if the image is missing, we defer to the ImagesController
-* When we hit the ImagesController, we look to see if the Variant already exists. If it does, we simply return it.
-* If the image does not exist, we check to see if the security hash matches. If not, we return some kind of error, possibly a 404 error. If it matches, we generate the image and store it in the variants storage.
-
-
-## Future
-
-* To increase performance, when a Variant object is generated on the server, we spawn a thread that starts creating the Variant's image file. The method returns immediately. This means that we are processing the Variant in parallel with the back and forth http requests.
-
-
-## Usage
-
-### Configuration
+## Configuration
 
 First, you need to configure ManagedImage.
 
@@ -76,7 +30,7 @@ ManagedImage.config do |config|
 end
 ```
 
-#### config.set_salt(salt)
+### config.set_salt(salt)
 
 Call this with the salt to use for generating the security hash. The value for `salt` must be a String.
 
@@ -84,7 +38,7 @@ Do not recommend putting the salt value directly in the initializer. I believe t
 
 http://www.gotealeaf.com/blog/managing-environment-configuration-variables-in-rails
 
-#### config.set_originals_storage(options), config.set_variants_storage(options)
+### config.set_originals_storage(options), config.set_variants_storage(options)
 
 This sets the storage/location where originally uploaded images should be stored and the storage/location where variants of that image should be stored.
 
@@ -103,90 +57,83 @@ There are also two special values that you can pass through.
 * `url` is a way to set the base URL for the file. If not provided, we use the `public_url` from the storage provider; however, this is not always desirable. For example, we may not want to give the Amazon S3 storage URL. We may wish to give the URL to a Rails Controller or to a CDN. Note: Usually the `url` option need only be provided for variants.
 
 
-### Uploading Images
+## Uploading Images in a Controller
 
-#### ImagesController
-
-There are two ways to upload images.
-
-The easiest way is to upload them to `ImagesController#create` by setting up a route in `config/routes.rb`.
-
-Here are the params:
-
-* file: An input type="file" where the file is uploaded
-* variants: An optional variants hash that describes variations of the image
-
-TODO:
-
-The variants hash looks something like this:
-
-* variants
-    - [name]
-        + method: [resize_method]
-        + width
-        + height
-        + [...depending on resize method]
-
-#### Custom Controller
-
-You can also create your own controller and call the `ManagedImage.upload` method. This method will return a `ManagedImage` instance and return, as a JSON object, a preview variant.
+From your controller call the `ManagedImage.upload` method. This method  returns a `ManagedImage` image object. This method has an `#as_json` method to make it easy to return the image, as JSON, to the browser.
 
 ```ruby
-# in controller
-def create
-  image = ManagedImage.upload(subdir, params[:file], params[:variants])
-  preview_variant = image.variants[:preview]
-  render json: preview_variant
+class MyController < ApplicationController
+  def create
+    image = ManagedImage.upload('path/to/image', params['file'])
+    render json: image
+  end
 end
 ```
 
-The subdir value can be a String or an Array of path segments. The version with the path segments can be useful to compose directory segments:
+Note that the uploaded file is placed in the `params['file']` which means:
 
-```ruby
-image = ManagedImage.upload(['site', site_id], uploaded_file, variants_hash)
-# same as
-image = ManagedImage.upload("#{site}/#{site_id}", uploaded_file, variants_hash)
+* The image was uploaded with an `<input type="file" name="file">`
+* The form would have to be `<form enctype="multipart/form-data">`
+
+The returned JSON object looks something like this:
+
+```javascript
+{
+  path: 'dir/to/image/1234567890abcdef-640-480.jpg'
+  width: 640,
+  height: 480
+}
 ```
 
-One could also return the actual image if desired:
+The returned JSON object does not contain a URL for the image because a ManagedImage object cannot be displayed directly.
+
+You can only display variants of an image.
+
+So, more typically, if you wanted to display the image immediately after retrieving the JSON object, you'd return a variant instead.
 
 ```ruby
-# in controller
-def create
-  image = ManagedImage.upload(subdir, params[:file], params[:variants])
-  preview_variant = image.variants[:preview]
-  send_data preview_variant.blob, :type => 'image/jpeg', :disposition => 'inline'
+class MyController < ApplicationController
+  def create
+    image = ManagedImage.upload('path/to/image', params[:file])
+    variant = image.resize_to_fit(320, 320)
+    render json: variant
+  end
 end
 ```
 
+The example above uses the `resize_to_fit` method which will resize the image so that it preserves its aspect ratio and fits within the width/height given in the arguments.
 
-### Creating Variants
+The returned JSON object would look something like this:
 
-Variants are simply variations of the same image.
-
-Ultimately a variant is like an original image that:
-
-1. Has been cropped to a rectangle
-2. Resized
-
-There are a number of methods to do this simply.
-
-```ruby
-# Resize to exact width/height. Does not preserve aspect ratio.
-variant = image.resize(width, height)
-
-# Resize to fit inside width/height. Preserves aspect ratio.
-variant = image.resize_to_fit(width, height)
-
-# Resize to fill exact width/height. Crops to fit. Preserves aspect ratio.
-variant = image.resize_to_fill(width, height)
-
-# Reframe allows you to specify the rectangle from the source image.
-# Rectangle specifies as Float values from 0.0 to 1.0 as portion of image.
-# Note that final image is rounded to nearest percent (i.e. 0.01)
-variant = image.reframe(width, height, x1, y1, x2, y2)
+```javascript
+{
+  image: {
+    path: 'dir/to/image/1234567890abcdef-640-480.jpg'
+    width: 640,
+    height: 480
+  },
+  url: 'http://some.domain.com/dir/to/image/1234567890abcdef-640-480-320-240-0-640-0-480.jpg?q=abcdef1234567890',
+  path: 'dir/to/image/1234567890abcdef-640-480-320-240-0-640-0-480.jpg',
+  pathWithQuery: 'dir/to/image/1234567890abcdef-640-480-320-240-0-640-0-480.jpg?q=abcdef1234567890',
+  width: 320,
+  height: 240,
+}
 ```
 
+You can use the `url` value to display the image in the browser.
+
+You could also send the variant image directly to the browser.
+
+```ruby
+class MyController < ApplicationController
+  def create
+    image = ManagedImage.upload('path/to/image', params[:file])
+    variant = image.resize_to_fit(320, 320)
+    send_data variant.blob, :type => variant.mimetype, :disposition => 'inline'
+    render json: variant
+  end
+end
+```
 
 
 ### Storing ManagedImage objects in Database
@@ -213,16 +160,18 @@ When images are uploaded using the `ManagedImage#upload` method, the directory a
 For example, for images that are uploaded to a site:
 
 ```ruby
-ManagedImage.upload('site/12345', params[:file], params[:variants])
+ManagedImage.upload("site/#{site.id}", params[:file], params[:variants])
 ```
 
-An alternative, and probably preferrable way to call this method is to pass an Array of Strings as the first argument.
+The problem with this method is that if somebody were able to modify the value of `site.id` they might be able to create extra directories that you haven't authorized. For example, if `site.id` was `a/b/c/d/e/f/g/h/i/j/k/l/m`. If it was sufficiently long enough, they might be able to break the filesystem.
+
+An alternative, and preferrable way to call this method is to pass an Array of Strings indtrsf of a String as the first argument.
 
 ```ruby
 ManagedImage.upload(['site', site.id], params[:file], params[:variants])
 ```
 
-In either case, the directory name is checked to ensure that there are no invalid characters to prevent certain security attacks like using `.` or `..` in the directory path. The only valid characters are 0-9, a-z and the dash (-). Only lowercase letters are accepted.
+In either case, the directory name is checked to ensure that there are no invalid characters to prevent certain security attacks like using `.` or `..` in the directory path. The only valid characters are 0-9, a-z, the dash (-) and the underscore (_). Only lowercase letters are accepted.
 
 
 ### Best Practices: Not Storing Variants
