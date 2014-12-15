@@ -58,3 +58,5 @@ gem 'mongoid', '~> 4.0.0'
 gem 'moped'
 
 gem "spring", group: :development
+
+gem 'browserify-rails', '~> 0.5'

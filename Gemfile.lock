@@ -31,6 +31,8 @@ GEM
     addressable (2.3.6)
     arel (5.0.1.20140414130214)
     awesome_print (1.2.0)
+    browserify-rails (0.5.1)
+      sprockets (~> 2.0)
     bson (2.3.0)
     builder (3.2.2)
     coffee-rails (4.0.1)
@@ -214,6 +216,7 @@ PLATFORMS
 
 DEPENDENCIES
   awesome_print
+  browserify-rails (~> 0.5)
   coffee-rails (~> 4.0.0)
   fastimage
   fog

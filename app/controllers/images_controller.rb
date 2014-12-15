@@ -3,10 +3,11 @@ class ImagesController < ApplicationController
   def create
     id = 'abc123'
     image = ManagedImage.upload(['site', id], params[:file])
-    variant = image.resize_to_fit(640, 640)
-    json = image.as_json
-    json['preview'] = variant
-    render json: variant
+    @image = image
+    @variant = image.resize_to_fit(640, 640)
+    # json = image.as_json
+    # json['preview'] = variant
+    render json: @variant
   end
 
   def create_original_only

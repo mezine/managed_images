@@ -15,18 +15,35 @@ With contents like:
 
 ```ruby
 ManagedImage.config do |config|
+  # Set the salt for the generation of the authentication Hash. The actual
+  # salt should be stored in something secure like an Environment variable.
   config.set_salt "salt"
+  # Configure Fog::Storage for the original images which cannot be accessed
+  # online and are used for creating the resized variants.
   config.set_originals_storage(
     provider: 'Local',
     local_root: File.join(Rails.root.to_path, '.data/managed-images'),
     dir: 'originals'
   )
+  # Configure Fog::Storage for the images which can be accessed online.
+  # They are generated from the original images.
   config.set_variants_storage(
     provider: 'Local',
     local_root: File.join(Rails.root.to_path, '.data/managed-images'),
     dir: 'variants',
     url: 'http://localhost:3000/managed-images'
   )
+  # Set the maximum uploaded image dimensions
+  # The limit is to prevent DOS attacks by filling a PNG or JPEG with an image
+  # the takes up too much RAM.
+  config.set_max_upload_image_size(5000, 5000)
+  # Sets the maximum size that the image is stored at.
+  # Images larger than this size are resized.
+  # Since all the smaller images are resized from this original image size,
+  # we want it to (a) be big enough to support any image size we may wish to
+  # support including Retina images but (b) be small enough that the storage
+  # issues won't become a problem.
+  config.set_max_originals_image_size(2560, 2560)
 end
 ```
 
@@ -34,21 +51,24 @@ end
 
 Call this with the salt to use for generating the security hash. The value for `salt` must be a String.
 
-Do not recommend putting the salt value directly in the initializer. I believe there is a more secure place to put Rails security values.
+Do not recommend putting the salt value directly in the initializer. These values should probably be stored in an Environment variable.
 
 http://www.gotealeaf.com/blog/managing-environment-configuration-variables-in-rails
+
 
 ### config.set_originals_storage(options), config.set_variants_storage(options)
 
 This sets the storage/location where originally uploaded images should be stored and the storage/location where variants of that image should be stored.
 
-Typically, originals images are not public. Only variant images are public (i.e. can be viewed from a URL)
+Typically, originals images are not available for public access.
+
+The variant images (resized versions of the originals) are public (i.e. can be viewed from a URL).
 
 `options` is a Hash that will be passed directly to Fog::Storage.new. You can learn more about acceptable values here:
 
 http://fog.io/storage/
 
-The values that can be passed through depend on the specific storage `provider` you select. A typical storage provider would be Amazon S3.
+The values that can be passed through depend on the specific storage provider you select. A typical storage provider would be Amazon S3.
 
 There are also two special values that you can pass through.
 
@@ -57,7 +77,21 @@ There are also two special values that you can pass through.
 * `url` is a way to set the base URL for the file. If not provided, we use the `public_url` from the storage provider; however, this is not always desirable. For example, we may not want to give the Amazon S3 storage URL. We may wish to give the URL to a Rails Controller or to a CDN. Note: Usually the `url` option need only be provided for variants.
 
 
+### config.set_max_upload_image_size(width, height)
+
+Use this to set the maximum image width/height of an uploaded image. If an image is uploaded that is larger than this size, then the upload will fail. Typically, we want this image to be as large as we can expect a user to upload and expect us to accept.
+
+Note: This is not the size of the image that we store. We always resize images to make sure they are no larger then the `max_originals_image_size` set below.
+
+
+### config.set_max_originals_image_size(width, height)
+
+This is the largest image size that we will store on our servers. If the image is larger than this size, it is resample to fit within the width/height. For example, if an image was uploaded at 5000x4000 pixels but we only supports a max of 2560x2560, the image would be resampled down to 2560x2048 to fit. Note that the aspect ratio would be preserved.
+
+
 ## Uploading Images in a Controller
+
+### Uploading and Returning an Image JSON Object
 
 From your controller call the `ManagedImage.upload` method. This method  returns a `ManagedImage` image object. This method has an `#as_json` method to make it easy to return the image, as JSON, to the browser.
 
@@ -70,9 +104,9 @@ class MyController < ApplicationController
 end
 ```
 
-Note that the uploaded file is placed in the `params['file']` which means:
+In this example, the uploaded file is put in the `params['file']` param which means:
 
-* The image was uploaded with an `<input type="file" name="file">`
+* The image was uploaded with `<input type="file" name="file">`
 * The form would have to be `<form enctype="multipart/form-data">`
 
 The returned JSON object looks something like this:
@@ -88,6 +122,8 @@ The returned JSON object looks something like this:
 The returned JSON object does not contain a URL for the image because a ManagedImage object cannot be displayed directly.
 
 You can only display variants of an image.
+
+### Uploading and Returning a Variant JSON Object
 
 So, more typically, if you wanted to display the image immediately after retrieving the JSON object, you'd return a variant instead.
 
@@ -107,11 +143,6 @@ The returned JSON object would look something like this:
 
 ```javascript
 {
-  image: {
-    path: 'dir/to/image/1234567890abcdef-640-480.jpg'
-    width: 640,
-    height: 480
-  },
   url: 'http://some.domain.com/dir/to/image/1234567890abcdef-640-480-320-240-0-640-0-480.jpg?q=abcdef1234567890',
   path: 'dir/to/image/1234567890abcdef-640-480-320-240-0-640-0-480.jpg',
   pathWithQuery: 'dir/to/image/1234567890abcdef-640-480-320-240-0-640-0-480.jpg?q=abcdef1234567890',
@@ -122,34 +153,51 @@ The returned JSON object would look something like this:
 
 You can use the `url` value to display the image in the browser.
 
-You could also send the variant image directly to the browser.
+
+### #show the image to the user
+
+The user accesses the image at a URL. Create a route to a #show method in the controller something like this:
+
+```ruby
+Rails.applications.routes.draw do
+  get '/managed-images/*path' => 'my_controller#show'
+end
+```
+
+In the controller's `#show` method, we create the variant from the path and the params[:q] which contains the authentication hexdigest.
+
+```ruby
+class MyController < ApplicationController
+  def show
+    variant = ManagedImage::Variant.from_path("#{params[:path]}.#{params[:format]}", params[:q])
+    send_data variant.blob, :type => variant.mimetype, :disposition => 'inline'
+  end
+end
+```
+
+We return the image by using `send_data` to return a blob and mimetype.
+
+
+### Combining Controller Return JSON Values
+
+The library is deliberately minimal to allow the maximum flexibility on how you return JSON values.
+
+For example, if you wanted to, you could return the original image, a preview variant and a thumbnail variant in a controller by using something like this:
 
 ```ruby
 class MyController < ApplicationController
   def create
     image = ManagedImage.upload('path/to/image', params[:file])
-    variant = image.resize_to_fit(320, 320)
-    send_data variant.blob, :type => variant.mimetype, :disposition => 'inline'
-    render json: variant
+    preview = image.resize_to_fit(320, 320)
+    thumbnail = image.resize_to_fit(100, 100)
+    json = {
+      image: image,
+      preview: preview,
+      thumbnail: thumbnail
+    }
+    render json: json
   end
 end
-```
-
-
-### Storing ManagedImage objects in Database
-
-After uploading an image, you can store the image in a Mongoid::Document by calling `ManagedImage#to_document`. You will get back a `ManagedImage::ImageDocument` object..
-
-```ruby
-image = ManagedImage.upload(subdir, uploaded_file, variants_hash)
-image_doc = image.to_document # Returns a Mongoid document object
-```
-
-You can convert that back into a ManagedImage object by calling `to_image` on the Document.
-
-```ruby
-image_document = some_document.image
-managed_image = image_document.to_image
 ```
 
 
@@ -160,7 +208,7 @@ When images are uploaded using the `ManagedImage#upload` method, the directory a
 For example, for images that are uploaded to a site:
 
 ```ruby
-ManagedImage.upload("site/#{site.id}", params[:file], params[:variants])
+ManagedImage.upload("site/#{site.id}", params[:file])
 ```
 
 The problem with this method is that if somebody were able to modify the value of `site.id` they might be able to create extra directories that you haven't authorized. For example, if `site.id` was `a/b/c/d/e/f/g/h/i/j/k/l/m`. If it was sufficiently long enough, they might be able to break the filesystem.
@@ -168,7 +216,7 @@ The problem with this method is that if somebody were able to modify the value o
 An alternative, and preferrable way to call this method is to pass an Array of Strings indtrsf of a String as the first argument.
 
 ```ruby
-ManagedImage.upload(['site', site.id], params[:file], params[:variants])
+ManagedImage.upload(['site', site.id], params[:file])
 ```
 
 In either case, the directory name is checked to ensure that there are no invalid characters to prevent certain security attacks like using `.` or `..` in the directory path. The only valid characters are 0-9, a-z, the dash (-) and the underscore (_). Only lowercase letters are accepted.
@@ -183,12 +231,9 @@ Once a variant URL is generated with a certain specification, the image file wil
 For example, all these methods will create the exact same Variant URL assuming the original image is of size 1024x768 (aspect ratio 4:3).
 
 ```ruby
-variant_1 = managed_image.resize(640, 480)
-variant_2 = managed_image.resize_to_fit(640, 480)
-variant_3 = managed_image.resize_to_fill(640, 480)
-variant_4 = managed_image.reframe(640, 480, 0.0, 0.0, 1.0, 1.0)
-# All variants refer to the same file on the server
-# variant_1.url == variant_2.url == variant_3.url == variant_4.url
+variant_1 = managed_image.resize_to_fit(640, 480)
+variant_2 = managed_image.reframe(640, 480, 0, 1024, 0, 768)
+# NOTE: Assuming original image size is 1024x768
 ```
 
 If you were to upload an image to use as a profile picture, here's how you could generate the variant at the time you want to display the image.
@@ -207,6 +252,7 @@ or
 Note: We'd probably use a helper in the last example.
 
 
+## UNDER CONSTRUCTION / IN PROGRESS
 
 ### Storing ManagingImage objects and Variant objects in JSON (e.g. Layout Builder)
 

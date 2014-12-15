@@ -26,3 +26,5 @@
 
 # Ignore vagrant directory
 /.vagrant
+
+node_modules
