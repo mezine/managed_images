@@ -14,6 +14,9 @@ module ManagedImage::VariantClass
       info.original_height
     )
     variant = image.new_variant(info.width, info.height, info.x1, info.y1, info.x2, info.y2)
+    ap '--------------------'
+    ap variant.hexdigest
+    ap hexdigest
     variant.authenticated = variant.hexdigest == hexdigest
     variant
   end
@@ -22,6 +25,8 @@ private
 
   # Returns all the information about the variant as a Struct from the path
   def info_from_path(path, hexdigest)
+    ap '----443432path'
+    ap path
     basename = File.basename(path, '.*')
     extname = File.extname(path)
     segments = path.split('/')    # segments of the path on '/'

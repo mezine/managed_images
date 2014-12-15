@@ -288,8 +288,7 @@ ClientImage.configForServer({
 
 TODO:
 
-[] Need to allow setting variants information in different ways which are declarative (e.g. resize to fit)
+[x] Need to allow setting variants information in different ways which are declarative (e.g. resize to fit)
 [x] ImagesController#show should set the right :type => 'images/jpeg'. Currently its static, needs to depend on image type.
-[] Perhaps some way to upload temporary images?
 [x] Make sure uploaded file is an Image
-[] Provide the argument for the subdirectory as an Array with proper argument checking to prevent '../' or './'
+[x] Provide the argument for the subdirectory as an Array with proper argument checking to prevent '../' or './'

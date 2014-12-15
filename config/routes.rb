@@ -11,7 +11,7 @@ Rails.application.routes.draw do
   get '/managed-images/resize-to-fit' => 'images#resize_to_fit'
   get '/managed-images/resize-to-fill' => 'images#resize_to_fill'
   get '/managed-images/resize-to-fill-at' => 'images#resize_to_fill_at'
-    get '/managed-images/*path' => 'images#show'
+  get '/managed-images/*path' => 'images#show'
 
   # Example of regular route:
   #   get 'products/:id' => 'catalog#view'
